@@ -2,7 +2,7 @@
 import os
 import json
 import requests
-import datetime
+import datetime as dt
 import streamlit as st
 import numpy as np
 import pandas as pd 
@@ -98,18 +98,18 @@ def files_to_dataframe(folder):
     runs.loc[runs.type == '', 'type'] = 'recoveryrun'
 
     runs['date'] = runs.start.dt.date
-    runs['week'] = 52 * (runs.start.dt.isocalendar().year - 2022) + runs.start.dt.isocalendar().week 
+    runs['week'] = 100 * runs.start.dt.isocalendar().year + runs.start.dt.isocalendar().week 
     runs['weekday'] = runs.start.dt.strftime('%A')
     runs['month'] = runs.start.dt.month
     runs['steps_per_minute'] = runs.steps / runs.duration
     runs['stride_length'] = 1000 * runs.distance / runs.steps
 
-    idx = pd.date_range(runs['date'].min() - datetime.timedelta(days=runs['date'].min().weekday()), datetime.datetime.now() + datetime.timedelta(days=(6 - datetime.datetime.now().weekday())))
+    idx = pd.date_range(runs['date'].min() - dt.timedelta(days=runs['date'].min().weekday()), dt.datetime.now() + dt.timedelta(days=(6 - dt.datetime.now().weekday())))
     for date in idx[~idx.isin(runs['date'])]:
         norun = pd.DataFrame(np.nan, index=[0], columns=runs.columns)
         norun['distance'] = 0
         norun['date'] = date.date()
-        norun['week'] = 52 * (date.isocalendar()[0] - 2022) + date.isocalendar()[1]
+        norun['week'] = 100*date.isocalendar()[0]+date.isocalendar()[1]
         norun['weekday'] = date.strftime('%A')
         runs = pd.concat([runs, norun], ignore_index=True)
 
@@ -121,6 +121,20 @@ def decimal_to_time(timedelta):
     minutes = int(timedelta % 60)
     seconds = int((timedelta*60) % 60)
     return hours, minutes, seconds
+
+def week_to_dates(option):
+    active_week = 100 * dt.date.today().isocalendar()[0] + dt.date.today().isocalendar()[1]
+    if option == active_week:
+        week_date = "This Week"
+    elif option == active_week - 1:
+        week_date = "Last Week"
+    else:
+        year = option // 100
+        week = option % 100
+        mon_date = dt.datetime.fromisocalendar(year, week, 1).strftime("%d/%m")
+        sun_date = dt.datetime.fromisocalendar(year, week, 7).strftime("%d/%m")
+        week_date = f'{mon_date}-{sun_date}'
+    return week_date
 
 #Display dashboard
 st.title("My running dashboard")
@@ -147,37 +161,57 @@ with tab1:
     runs_week_agg['pace'] = runs_week_agg.duration / runs_week_agg.distance
 
     #Let the user choose which week to display
-    option = st.selectbox('Week',runs.week.unique())
+    option = st.selectbox('Week',runs.week.unique(), index=len(runs.week.unique())-1, format_func=week_to_dates, label_visibility="collapsed")
 
     col1, col2, col3, col4 = st.columns(4)
 
     #Display the number of runs
-    runs_delta = int(runs_week_agg[runs_week_agg.week == option].start.item() - runs_week_agg[runs_week_agg.week == option - 1].start.item())
-    sign = "+" if runs_delta >= 0 else ""
-    col1.metric("Runs", runs_week_agg[runs_week_agg.week == option].start, f'{sign}{runs_delta}')
+    if option == runs_week_agg.week.min():
+        delta = None
+    else:
+        runs_delta = int(runs_week_agg[runs_week_agg.week == option].start.item() - runs_week_agg[runs_week_agg.week == option - 1].start.item())
+        sign = "+" if runs_delta >= 0 else ""
+        delta = f'{sign}{runs_delta}'
+    col1.metric("Runs", runs_week_agg[runs_week_agg.week == option].start, delta)
 
     #Display the number of kilometers ran
-    kilometers_delta = runs_week_agg[runs_week_agg.week == option].distance.item() - runs_week_agg[(runs_week_agg.week >= option - 5) & (runs_week_agg.week <= option - 1)].distance.mean()
-    sign = "+" if kilometers_delta >= 0 else ""
-    col2.metric("Kilometers", runs_week_agg[runs_week_agg.week == option].distance.round(2), f'{sign}{round(kilometers_delta,2)} km')
+    if option == runs_week_agg.week.min():
+        delta = None
+    else:
+        kilometers_delta = runs_week_agg[runs_week_agg.week == option].distance.item() - runs_week_agg[runs_week_agg.week == option - 1].distance.mean()
+        sign = "+" if kilometers_delta >= 0 else ""
+        delta = f'{sign}{round(kilometers_delta,2)} km'
+    col2.metric("Kilometers", runs_week_agg[runs_week_agg.week == option].distance.round(2), delta)
 
     #Display the average pace
-    pace_delta = runs_week_agg[runs_week_agg.week == option].pace.item() - runs_week_agg[(runs_week_agg.week >= option - 5) & (runs_week_agg.week <= option - 1)].pace.mean()
-    sign = "+" if pace_delta >= 0 else "-"
-    hd, md, sd = decimal_to_time(abs(pace_delta))
+    if option == runs_week_agg.week.min():
+        delta = None
+    else:
+        pace_delta = runs_week_agg[runs_week_agg.week == option].pace.item() - runs_week_agg[runs_week_agg.week == option - 1].pace.mean()
+        sign = "+" if pace_delta >= 0 else "-"
+        hd, md, sd = decimal_to_time(abs(pace_delta))
+        delta = "%s%d'%02d\"" % (sign, md, sd)
     pace = runs_week_agg[runs_week_agg.week == option].pace
     h, m, s = decimal_to_time(pace)
-    col3.metric("Pace", "%d'%02d\"" % (m, s), "%s%d'%02d\"" % (sign, md, sd), "inverse")
+    col3.metric("Pace", "%d'%02d\"" % (m, s), delta, "inverse")
 
     #Display the time ran
-    time_delta = runs_week_agg[runs_week_agg.week == option].duration.item() - runs_week_agg[(runs_week_agg.week >= option - 5) & (runs_week_agg.week <= option - 1)].duration.mean()
-    sign = "+" if time_delta >= 0 else "-"
-    hd, md, sd = decimal_to_time(abs(time_delta))
+    if option == runs_week_agg.week.min():
+        delta = None
+    else:
+        time_delta = runs_week_agg[runs_week_agg.week == option].duration.item() - runs_week_agg[runs_week_agg.week == option - 1].duration.mean()
+        sign = "+" if time_delta >= 0 else "-"
+        hd, md, sd = decimal_to_time(abs(time_delta))
+        delta = "%s%d:%02d:%02d" % (sign, hd, md, sd)
     time = runs_week_agg[runs_week_agg.week == option].duration
     h, m, s = decimal_to_time(time)
-    col4.metric("Time", "%d:%02d:%02d" % (h, m, s), "%s%d:%02d:%02d" % (sign, hd, md, sd))
+    col4.metric("Time", "%d:%02d:%02d" % (h, m, s), delta)
 
-    chart = alt.Chart(runs[runs.week == option]).mark_bar().encode(x='weekday', y='distance', color="type")
+    #Display a chart of distance ran over the week
+    st.subheader("Distance")
+    chart = alt.Chart(runs[runs.week == option]).mark_bar().encode(
+        alt.X('date', sort=["Mon"], timeUnit="day", title="", type='ordinal'), 
+        alt.Y('distance', title="", type='quantitative'))
     st.altair_chart(chart, use_container_width=True)
 
 with tab2:
