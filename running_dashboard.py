@@ -1,29 +1,24 @@
+# Import modules
 import os
 import json
 import requests
 import datetime
 import streamlit as st
 import numpy as np
-import pandas as pd
+import pandas as pd 
+import altair as alt
 
+# Define constants
 ACTIVITY_FOLDER = os.path.join(os.getcwd(), "runs")
 ACTIVITY_LIST_URL = "https://api.nike.com/sport/v3/me/activities/after_time/0"
 ACTIVITY_LIST_PAGINATION = "https://api.nike.com/sport/v3/me/activities/after_id/{after_id}"
 ACTIVITY_DETAILS_URL = "https://api.nike.com/sport/v3/me/activity/{activity_id}?metrics=ALL"
 
-st.title("My running dashboard")
-
-with st.form("my_form"):
-    access_token = st.text_input('Access Token', placeholder='eyJhbGc...')
-    submitted = st.form_submit_button("Submit")
-    headers = {'Authorization' : 'Bearer ' + access_token}
-
-@st.cache(suppress_st_warning=True)
-def load_data():
+#Define functions
+def nike_api_call(headers):
     activity_ids = []
     page_num = 1
     next_page = ACTIVITY_LIST_URL
-
     while True:
         activity_list = requests.get(next_page, headers=headers)
         for activity in activity_list.json()["activities"]:
@@ -59,70 +54,140 @@ def load_data():
         my_bar.progress(i/len(activity_ids))
     return None
 
-load_data()
+def files_to_dataframe(folder):
+    dir_list = os.listdir(folder)
+    if ".DS_Store" in dir_list:
+        dir_list.remove(".DS_Store")
 
-dir_list = os.listdir(ACTIVITY_FOLDER)
-if ".DS_Store" in dir_list:
-     dir_list.remove(".DS_Store")
-runs = []
+    runs = []
+    for file in dir_list:
+        data = json.load(open(folder+"/"+file))
+        run = [str(data['tags']['com.nike.name']),
+                int(data['start_epoch_ms']),
+                int(data['end_epoch_ms']),
+                int(data['active_duration_ms']),
+                str(data['tags']['com.nike.running.goaltype']),
+                float(data['tags']['com.nike.temperature']),
+                str(data['tags']['com.nike.weather']),
+                int(data['tags']['rpe']),
+                str(data['tags']['terrain'])]
+            
+        if 'com.nike.nrc.program.workout.title' in data['tags']:
+            run.append(str(data['tags']['com.nike.nrc.program.workout.title']))
+        else:
+            run.append('')
+        
+        if 'com.nike.nrc.program.title' in data['tags']:
+            run.append(str(data['tags']['com.nike.nrc.program.title']))
+        else:
+            run.append('')
 
-for file in dir_list:
+        summary = pd.DataFrame(data['summaries'])
+        summary.sort_values("metric", inplace=True)
+        summary = summary[summary.metric != "nikefuel"]["value"].tolist()
+        runs.append(run+summary)
 
-     data = json.load(open(ACTIVITY_FOLDER+"/"+file))
+    runs = pd.DataFrame(runs, columns = ['name', 'start', 'end', 'duration', 'goaltype', 'temperature', 'weather', 'effort', 'terrrain', 'program_type', 'program_name', 'ascent', 'calories', 'descent', 'distance', 'pace', 'speed', 'steps'])
+    runs.start = pd.to_datetime(runs.start, unit='ms')
+    runs.end = pd.to_datetime(runs.end, unit='ms')
+    runs.duration = runs.duration / 60000
 
-     run = [str(data['tags']['com.nike.name']),
-            int(data['start_epoch_ms']),
-            int(data['end_epoch_ms']),
-            int(data['active_duration_ms']),
-            str(data['tags']['com.nike.running.goaltype']),
-            float(data['tags']['com.nike.temperature']),
-            str(data['tags']['com.nike.weather']),
-            int(data['tags']['rpe']),
-            str(data['tags']['terrain'])]
-          
-     if 'com.nike.nrc.program.workout.title' in data['tags']:
-          run.append(str(data['tags']['com.nike.nrc.program.workout.title']))
-     else:
-          run.append('')
-     
-     if 'com.nike.nrc.program.title' in data['tags']:
-          run.append(str(data['tags']['com.nike.nrc.program.title']))
-     else:
-          run.append('')
+    runs['type'] = ''
+    runs.loc[runs.goaltype.str.contains('speed'), 'type'] = 'speedrun'
+    runs.loc[(runs.program_type.str.casefold() == 'long run') | runs.name.str.contains('Gratification'), 'type'] = 'longrun'
+    runs.loc[runs.type == '', 'type'] = 'recoveryrun'
 
-     summary = pd.DataFrame(data['summaries'])
-     summary.sort_values("metric", inplace=True)
-     summary = summary[summary.metric != "nikefuel"]["value"].tolist()
-     runs.append(run+summary)
+    runs['date'] = runs.start.dt.date
+    runs['week'] = 52 * (runs.start.dt.isocalendar().year - 2022) + runs.start.dt.isocalendar().week 
+    runs['weekday'] = runs.start.dt.strftime('%A')
+    runs['month'] = runs.start.dt.month
+    runs['steps_per_minute'] = runs.steps / runs.duration
+    runs['stride_length'] = 1000 * runs.distance / runs.steps
 
-runs = pd.DataFrame(runs, columns = ['name', 'start', 'end', 'duration', 'goaltype', 'temperature', 'weather', 'effort', 'terrrain', 'program_type', 'program_name', 'ascent', 'calories', 'descent', 'distance', 'pace', 'speed', 'steps'])
-runs.start = pd.to_datetime(runs.start, unit='ms')
-runs.end = pd.to_datetime(runs.end, unit='ms')
-runs.duration = runs.duration / 60000
+    idx = pd.date_range(runs['date'].min() - datetime.timedelta(days=runs['date'].min().weekday()), datetime.datetime.now() + datetime.timedelta(days=(6 - datetime.datetime.now().weekday())))
+    for date in idx[~idx.isin(runs['date'])]:
+        norun = pd.DataFrame(np.nan, index=[0], columns=runs.columns)
+        norun['distance'] = 0
+        norun['date'] = date.date()
+        norun['week'] = 52 * (date.isocalendar()[0] - 2022) + date.isocalendar()[1]
+        norun['weekday'] = date.strftime('%A')
+        runs = pd.concat([runs, norun], ignore_index=True)
 
-runs['type'] = ''
-runs.loc[runs.goaltype.str.contains('speed'), 'type'] = 'speedrun'
-runs.loc[(runs.program_type == 'Long run') | runs.name.str.contains('Gratification'), 'type'] = 'longrun'
-runs.loc[runs.type == '', 'type'] = 'recoveryrun'
+    runs = runs.sort_values(by=['date'], ignore_index=True)
+    return runs
 
-runs['date'] = runs.start.dt.date
-runs['week'] = runs.start.dt.isocalendar().year * 100 + runs.start.dt.isocalendar().week
-runs['weekday'] = runs.start.dt.strftime('%A')
-runs['month'] = runs.start.dt.month
-runs['steps_per_minute'] = runs.steps / runs.duration
-runs['stride_length'] = 1000 * runs.distance / runs.steps
+def decimal_to_time(timedelta):
+    hours = int(timedelta) // 60
+    minutes = int(timedelta % 60)
+    seconds = int((timedelta*60) % 60)
+    return hours, minutes, seconds
 
-# idx = pd.date_range(runs['date'].min() - datetime.timedelta(days=runs['date'].min().weekday()), datetime.datetime.now() + datetime.timedelta(days=(6 - datetime.datetime.now().weekday())))
-# for date in idx[~idx.isin(runs['date'])]:
-#     norun = pd.DataFrame(np.nan, index=[0], columns=runs.columns)
-#     norun['date'] = date.date()
-#     norun['week'] = date.isocalendar().week
-#     norun['weekday'] = date.strftime('%A')
-#     runs = pd.concat([runs, norun], ignore_index=True)
+#Display dashboard
+st.title("My running dashboard")
 
-runs = runs.sort_values(by=['date'], ignore_index=True)
+with st.sidebar:
+    st.info("Get the latest data by calling the Nike API")
+    with st.form("access_token"):
+        access_token = st.text_input('Enter your access token', placeholder='eyJhbGc...')
 
-average_pace = runs[['week', 'distance']].groupby(['week'], as_index=False).sum()
+        submitted = st.form_submit_button("Call the API")
+        if submitted:
+            headers = {'Authorization' : 'Bearer ' + access_token}
+            nike_api_call(headers)
 
-st.subheader("Distance per week")
-st.bar_chart(average_pace, x="week", y="distance")
+runs = files_to_dataframe(ACTIVITY_FOLDER)
+
+st.subheader("Activity")
+tab1, tab2, tab3, tab4 = st.tabs(["Week", "Month", "Year", "All"])
+
+
+with tab1:
+    #Get the running metrics per week
+    runs_week_agg = runs.groupby(['week'], as_index=False).agg({'start': 'count', 'distance': 'sum', 'duration': 'sum'})
+    runs_week_agg['pace'] = runs_week_agg.duration / runs_week_agg.distance
+
+    #Let the user choose which week to display
+    option = st.selectbox('Week',runs.week.unique())
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    #Display the number of runs
+    runs_delta = int(runs_week_agg[runs_week_agg.week == option].start.item() - runs_week_agg[runs_week_agg.week == option - 1].start.item())
+    sign = "+" if runs_delta >= 0 else ""
+    col1.metric("Runs", runs_week_agg[runs_week_agg.week == option].start, f'{sign}{runs_delta}')
+
+    #Display the number of kilometers ran
+    kilometers_delta = runs_week_agg[runs_week_agg.week == option].distance.item() - runs_week_agg[(runs_week_agg.week >= option - 5) & (runs_week_agg.week <= option - 1)].distance.mean()
+    sign = "+" if kilometers_delta >= 0 else ""
+    col2.metric("Kilometers", runs_week_agg[runs_week_agg.week == option].distance.round(2), f'{sign}{round(kilometers_delta,2)} km')
+
+    #Display the average pace
+    pace_delta = runs_week_agg[runs_week_agg.week == option].pace.item() - runs_week_agg[(runs_week_agg.week >= option - 5) & (runs_week_agg.week <= option - 1)].pace.mean()
+    sign = "+" if pace_delta >= 0 else "-"
+    hd, md, sd = decimal_to_time(abs(pace_delta))
+    pace = runs_week_agg[runs_week_agg.week == option].pace
+    h, m, s = decimal_to_time(pace)
+    col3.metric("Pace", "%d'%02d\"" % (m, s), "%s%d'%02d\"" % (sign, md, sd), "inverse")
+
+    #Display the time ran
+    time_delta = runs_week_agg[runs_week_agg.week == option].duration.item() - runs_week_agg[(runs_week_agg.week >= option - 5) & (runs_week_agg.week <= option - 1)].duration.mean()
+    sign = "+" if time_delta >= 0 else "-"
+    hd, md, sd = decimal_to_time(abs(time_delta))
+    time = runs_week_agg[runs_week_agg.week == option].duration
+    h, m, s = decimal_to_time(time)
+    col4.metric("Time", "%d:%02d:%02d" % (h, m, s), "%s%d:%02d:%02d" % (sign, hd, md, sd))
+
+    chart = alt.Chart(runs[runs.week == option]).mark_bar().encode(x='weekday', y='distance', color="type")
+    st.altair_chart(chart, use_container_width=True)
+
+with tab2:
+    #Get the running metrics per month
+    runs_month_agg = runs.groupby(['month'], as_index=False).agg({'start': 'count', 'distance': 'sum', 'duration': 'sum'})
+    runs_month_agg['pace'] = runs_month_agg.duration / runs_month_agg.distance
+
+    #Let the user choose which week to display
+    option = st.selectbox('Month',runs.month.unique())
+
+with tab3:
+    average_pace = runs[['week', 'distance']].groupby(['week'], as_index=False).sum()
+    st.bar_chart(average_pace, x="week", y="distance")
