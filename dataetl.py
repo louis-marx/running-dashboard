@@ -38,7 +38,7 @@ def files_to_dataframe(folder):
         summary = summary[summary.metric != "nikefuel"]["value"].tolist()
         runs.append(run+summary)
 
-    runs = pd.DataFrame(runs, columns = ['name', 'start', 'end', 'duration', 'goaltype', 'temperature', 'weather', 'effort', 'terrrain', 'program_type', 'program_name', 'ascent', 'calories', 'descent', 'distance', 'pace', 'speed', 'steps'])
+    runs = pd.DataFrame(runs, columns = ['name', 'start', 'end', 'duration', 'goaltype', 'temperature', 'weather', 'effort', 'terrain', 'program_type', 'program_name', 'ascent', 'calories', 'descent', 'distance', 'pace', 'speed', 'steps'])
     runs.start = pd.to_datetime(runs.start, unit='ms')
     runs.end = pd.to_datetime(runs.end, unit='ms')
     runs.duration = runs.duration / 60000
@@ -56,5 +56,4 @@ def files_to_dataframe(folder):
     runs['steps_per_minute'] = runs.steps / runs.duration
     runs['stride_length'] = 1000 * runs.distance / runs.steps
 
-    runs = runs.sort_values(by=['date'], ignore_index=True)
     return runs

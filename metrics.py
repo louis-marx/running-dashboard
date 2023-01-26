@@ -64,9 +64,9 @@ def get_metrics(df, metric, time, unit):
         return None
 
 def get_options(df, unit):
-    options = [*range(df[unit].min(), df[unit].max()+1)]
+    options = [*reversed(range(df[unit].min(), df[unit].max()+1))]
     nb = min(7,len(options))
-    return options[-nb:]
+    return options[:nb]
 
 def display_metrics(df, unit):
     #Get the running metrics per time unit
@@ -75,7 +75,7 @@ def display_metrics(df, unit):
 
     #Let the user choose which time to display
     options = get_options(df, unit)
-    option = st.selectbox(unit, options, index=len(options)-1, format_func=format_dict[unit], label_visibility="collapsed")
+    option = st.selectbox(unit, options, index=0, format_func=format_dict[unit], label_visibility="collapsed")
 
     metrics = ['Runs', 'Kilometers', 'Pace', 'Time']
     cols = st.columns(len(metrics))

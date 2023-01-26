@@ -1,4 +1,5 @@
 import streamlit as st
+from nikeapi import nike_api_call
 
 st.title('Home Page')
 
