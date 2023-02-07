@@ -32,13 +32,18 @@ def files_to_dataframe(folder):
             run.append(str(data['tags']['com.nike.nrc.program.title']))
         else:
             run.append('')
+        
+        if 'com.nike.running.audioguidedrun.thumbnail' in data['tags']:
+            run.append(str(data['tags']['com.nike.running.audioguidedrun.thumbnail']))
+        else:
+            run.append('https://picsum.photos/200')
 
         summary = pd.DataFrame(data['summaries'])
         summary.sort_values("metric", inplace=True)
         summary = summary[summary.metric != "nikefuel"]["value"].tolist()
         runs.append(run+summary)
 
-    runs = pd.DataFrame(runs, columns = ['name', 'start', 'end', 'duration', 'goaltype', 'temperature', 'weather', 'effort', 'terrain', 'program_type', 'program_name', 'ascent', 'calories', 'descent', 'distance', 'pace', 'speed', 'steps'])
+    runs = pd.DataFrame(runs, columns = ['name', 'start', 'end', 'duration', 'goaltype', 'temperature', 'weather', 'effort', 'terrain', 'program_type', 'program_name', 'thumbnail', 'ascent', 'calories', 'descent', 'distance', 'pace', 'speed', 'steps'])
     runs.start = pd.to_datetime(runs.start, unit='ms')
     runs.end = pd.to_datetime(runs.end, unit='ms')
     runs.duration = runs.duration / 60000
