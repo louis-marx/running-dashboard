@@ -1,5 +1,6 @@
 import os
 import json
+import urllib.request
 import datetime as dt
 import numpy as np
 import pandas as pd
@@ -34,9 +35,10 @@ def files_to_dataframe(folder):
             run.append('')
         
         if 'com.nike.running.audioguidedrun.thumbnail' in data['tags']:
-            run.append(str(data['tags']['com.nike.running.audioguidedrun.thumbnail']))
+            urllib.request.urlretrieve(str(data['tags']['com.nike.running.audioguidedrun.thumbnail']), "thumbnails/" + os.path.splitext(file)[0] +".jpg")
         else:
-            run.append('https://picsum.photos/200')
+            urllib.request.urlretrieve('https://picsum.photos/200', "thumbnails/" + os.path.splitext(file)[0] +".jpg")
+        run.append(os.path.splitext(file)[0] +".jpg")
 
         summary = pd.DataFrame(data['summaries'])
         summary.sort_values("metric", inplace=True)

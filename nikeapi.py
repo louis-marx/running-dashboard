@@ -5,6 +5,7 @@ import streamlit as st
 
 # Define constants
 ACTIVITY_FOLDER = os.path.join(os.getcwd(), "runs")
+THUMBNAILS_FOLDER = os.path.join(os.getcwd(), "thumbnails")
 ACTIVITY_LIST_URL = "https://api.nike.com/sport/v3/me/activities/after_time/0"
 ACTIVITY_LIST_PAGINATION = "https://api.nike.com/sport/v3/me/activities/after_id/{after_id}"
 ACTIVITY_DETAILS_URL = "https://api.nike.com/sport/v3/me/activity/{activity_id}?metrics=ALL"
@@ -32,6 +33,9 @@ def nike_api_call(headers):
 
     if not os.path.exists(ACTIVITY_FOLDER):
             os.mkdir(ACTIVITY_FOLDER)
+    
+    if not os.path.exists(THUMBNAILS_FOLDER):
+            os.mkdir(THUMBNAILS_FOLDER)
 
     i=0.0
     my_bar = st.progress(i)

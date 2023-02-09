@@ -58,8 +58,7 @@ for index, row in runs.iterrows():
         st.info(row.program_name + " Training Plan")
     img, ttl = st.columns([2, 7], gap="medium")
     with img:
-        urllib.request.urlretrieve(row['thumbnail'], "image.jpg")
-        image = Image.open('image.jpg')
+        image = Image.open('thumbnails/'+row['thumbnail'])
         st.image(image, use_column_width=True)
     with ttl:
         st.markdown(f"### {row.date.strftime('%d/%m/%Y')}")
