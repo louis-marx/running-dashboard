@@ -37,7 +37,7 @@ def get_pace_stat(df, time, unit):
         else:
             pace_delta = None
     else:
-        pace = "-"
+        pace = "-'--\""
         pace_delta = None
     return pace, pace_delta, "inverse"
 
@@ -63,7 +63,12 @@ def get_metrics(df, metric, time, unit):
         return None
 
 def get_options(df, unit):
-    options = [*reversed(range(df[unit].min(), (dt.date.today().isocalendar()[1]+13)%52+1))]
+    if unit == 'week':
+        options = [*reversed(range(df[unit].min(), (dt.date.today().isocalendar()[1]+13)%52+1))]
+    elif unit == 'month':
+        options = [*reversed(range(df[unit].min(), (dt.date.today().month+15)%12+1))]
+    elif unit == 'year':
+        options = [*reversed(range(df[unit].min(), dt.date.today().year+1))]
     nb = min(7,len(options))
     return options[:nb]
 

@@ -54,14 +54,9 @@ def get_weather_icon(weather):
 runs = runs.sort_values(by=['date'], ascending=False, ignore_index=True)
 for index, row in runs.iterrows():
     st.markdown("---")
-    # title, program = st.columns(2)
-    # with title:
-    #     st.markdown(f"### {row['name']}")
-    # with program:
-    #     st.info(row.program_name + " Training Plan")
     if row.program_name != '':
         st.info(row.program_name + " Training Plan")
-    img, ttl = st.columns([1, 3], gap="medium")
+    img, ttl = st.columns([2, 7], gap="medium")
     with img:
         urllib.request.urlretrieve(row['thumbnail'], "image.jpg")
         image = Image.open('image.jpg')
@@ -69,7 +64,7 @@ for index, row in runs.iterrows():
     with ttl:
         st.markdown(f"### {row.date.strftime('%d/%m/%Y')}")
         st.markdown(f"### :blue[{row['name']}]")
-    col1, col2, col3, col4 = st.columns(4, gap="medium")
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Kilometers",round(row.distance,2))
         # st.metric("Weather",get_weather_icon(row.weather))
